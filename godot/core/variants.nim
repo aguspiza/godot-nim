@@ -73,7 +73,7 @@ proc newVariant*(r: cdouble): Variant {.inline.} =
 
 proc newVariant*(s: string): Variant {.inline.} =
   new(result, variantFinalizer)
-  if s.isNil:
+  if s == "":
     initGodotVariant(result.godotVariant)
   else:
     var godotStr = s.toGodotString()

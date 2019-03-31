@@ -38,14 +38,14 @@ proc `$`*(self: GodotString): string =
 
 proc toGodotString*(s: string): GodotString {.inline.} =
   ## Converts the Nim string into ``GodotString``
-  if s.isNil:
+  if s == "":
     initGodotString(result)
   else:
     initGodotString(result, cstring(s), cint(s.len + 1))
 
 proc toGodotString*(s: cstring): GodotString {.inline.} =
   ## Converts the cstring into ``GodotString``
-  if s.isNil:
+  if s == "":
     initGodotString(result)
   else:
     initGodotString(result, s, cint(s.len + 1))

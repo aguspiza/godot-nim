@@ -3,6 +3,7 @@
 import macros, tables, typetraits
 import godotinternal, internal.godotvariants
 import godotnim, core.variants
+import strutils, sets, sequtils
 
 type
   VarDecl = ref object
@@ -115,7 +116,7 @@ proc removeStrPragma(statement: NimNode,
   ## Removes the pragma from the node and returns value of the pragma
   ## Works for routine nodes or nnkPragmaExpr
   let node = removePragmaNode(statement, pname)
-  result = if node.isNil: nil
+  result = if node.isNil: ""
            else: $node
 
 proc isExported(node: NimNode): bool {.compileTime.} =
@@ -197,7 +198,7 @@ proc parseType(definition, callSite: NimNode): ObjectDecl =
       parseError(option, "valid type specifier expected")
   result.isTool = isTool
 
-  if result.parentName.isNil: result.parentName = "Object"
+  if result.parentName == "": result.parentName = "Object"
   for statement in body:
     case statement.kind:
       of nnkVarSection:
@@ -424,9 +425,6 @@ template registerGodotField(classNameLit, classNameIdent, propNameLit,
                                unsafeAddr attr, setFunc, getFunc)
   hintStrGodot.deinit()
 
-static:
-  import strutils, sets, sequtils
-
 proc toGodotStyle(s: string): string {.compileTime.} =
   result = newStringOfCap(s.len + 10)
   for c in s:
@@ -447,7 +445,7 @@ proc genType(obj: ObjectDecl): NimNode {.compileTime.} =
   let objTy = newNimNode(nnkObjectTy)
   typeDef.add(newNimNode(nnkRefTy).add(objTy))
   objTy.add(newEmptyNode())
-  if obj.parentName.isNil:
+  if obj.parentName == "":
     objTy.add(newEmptyNode())
   else:
     objTy.add(newNimNode(nnkOfInherit).add(ident(obj.parentName)))
@@ -506,22 +504,22 @@ proc genType(obj: ObjectDecl): NimNode {.compileTime.} =
     result.add(meth.nimNode)
 
   # Register Godot object
-  let parentName = if obj.parentName.isNil: newStrLitNode("Object")
+  let parentName = if obj.parentName == "": newStrLitNode("Object")
                    else: newStrLitNode(obj.parentName)
   let classNameLit = newStrLitNode(obj.name)
   let classNameIdent = ident(obj.name)
-  let isRef: bool = if obj.parentName.isNil: false
+  let isRef: bool = if obj.parentName == "": false
                     else: obj.parentName in refClasses
   result.add(getAst(
-    registerGodotClass(classNameIdent, classNameLit, isRef, parentName,
-                       genSym(nskProc, "createFunc"), obj.isTool)))
+    registerGodotClass(classNameIdent, classNameLit, newLit(isRef), parentName,
+                       genSym(nskProc, "createFunc"), newLit(obj.isTool))))
 
   # Register fields (properties)
   for field in obj.fields:
     if field.isNoGodot: continue
-    let hintStr = if field.hintStr.isNil: "NIM"
+    let hintStr = if field.hintStr == "": "NIM"
                   else: field.hintStr
-    let hint = if field.hint.isNil: "NIM"
+    let hint = if field.hint == "": "NIM"
                else: field.hint
     let usage =
       if field.usage.isNil:
@@ -546,7 +544,7 @@ proc genType(obj: ObjectDecl): NimNode {.compileTime.} =
                                methodNameLit, minArgs, maxArgs,
                                argTypes, methFuncIdent, hasReturnValue) =
     {.emit: """/*TYPESECTION*/
-N_NOINLINE(void, setStackBottom)(void* thestackbottom);
+N_NOINLINE(void, nimGC_setStackBottom)(void* thestackbottom);
 """.}
     proc methFuncIdent(obj: ptr GodotObject, methodData: pointer,
                        userData: pointer, numArgs: cint,
@@ -554,7 +552,7 @@ N_NOINLINE(void, setStackBottom)(void* thestackbottom);
                       GodotVariant {.noconv.} =
       var stackBottom {.volatile.}: pointer
       {.emit: """
-        setStackBottom((void*)(&`stackBottom`));
+      nimGC_setStackBottom((void*)(&`stackBottom`));
       """.}
       let self = cast[classNameIdent](userData)
       const isStaticCall = methodNameLit == cstring"_ready" or
